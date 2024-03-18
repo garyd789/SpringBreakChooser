@@ -19,6 +19,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
 import java.util.*
 import kotlin.math.sqrt
+import android.net.Uri
+import kotlin.random.Random
 
 
 private const val TAG = "MainActivity"
@@ -37,6 +39,15 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
     private var acceleration = 0f
     private var currentAcceleration = 0f
     private var lastAcceleration = 0f
+
+
+    private val famousSites = mapOf(
+        "English" to listOf("Big Ben, London, England", "Statue of Liberty, New York, USA"),
+        "French" to listOf("Eiffel Tower, Paris, France", "Mont Saint-Michel, Normandy, France"),
+        "Spanish" to listOf("Sagrada Familia, Barcelona, Spain", "Alhambra, Granada, Spain"),
+        "Italian" to listOf("Colosseum, Rome, Italy", "Leaning Tower of Pisa, Pisa, Italy")
+    )
+    private var  mapUri: Uri = Uri.parse("geo:0,0?q=${Uri.encode("Statue of Liberty, New York, USA")}")
 
 
     private val speechResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -104,6 +115,7 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
         Toast.makeText(applicationContext, languages[position], Toast.LENGTH_LONG).show()
         selectedLanguage = languages[position] ?: ""
         Log.d(TAG, "Selected language: $selectedLanguage")
+        updateAddressForSelectedLanguage(selectedLanguage)
     }
 
     override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -123,11 +135,28 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
             acceleration = acceleration * 0.9f + delta
 
 
-            if (acceleration > 12) {
+            if (acceleration > 8 && binding.userInput.text.toString().isNotBlank()) {
                 Log.d(TAG, "Initializing sensors")
                 Toast.makeText(this@MainActivity, "Shake Event Detected", Toast.LENGTH_SHORT).show()
+                val mapIntent = Intent(Intent.ACTION_VIEW, mapUri)
+                mapIntent.setPackage("com.google.android.apps.maps")
+
+                // Launch activity that can handle implicit intent
+                if (mapIntent.resolveActivity(packageManager) != null) {
+                    startActivity(mapIntent)
+                }
             }
         }
         override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
+
+    }
+    private fun updateAddressForSelectedLanguage(language: String) {
+        val sitesList = famousSites[language] ?: return
+
+
+        val siteAddress = sitesList.random()
+
+        // Update the mapUri with the new address
+        mapUri = Uri.parse("geo:0,0?q=${Uri.encode(siteAddress)}")
     }
 }
