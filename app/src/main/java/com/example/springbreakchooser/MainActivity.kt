@@ -20,14 +20,15 @@ import android.content.Context
 import java.util.*
 import kotlin.math.sqrt
 import android.net.Uri
-import kotlin.random.Random
+import android.speech.tts.TextToSpeech
 
 
 private const val TAG = "MainActivity"
-class MainActivity : AppCompatActivity(), OnItemSelectedListener {
+class MainActivity : AppCompatActivity(), OnItemSelectedListener, TextToSpeech.OnInitListener {
     private lateinit var binding: ActivityMainBinding
+    private lateinit var textToSpeech: TextToSpeech
     private var selectedLanguage = ""
-    private var languages = arrayOf("English", "French", "Spanish", "Italian")
+    private var languages = arrayOf("Choose Language","English", "French", "Spanish", "Italian")
     private val languageTags = mapOf(
         "English" to "en-US",
         "French" to "fr-FR",
@@ -49,6 +50,13 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
     )
     private var  mapUri: Uri = Uri.parse("geo:0,0?q=${Uri.encode("Statue of Liberty, New York, USA")}")
 
+    private val hello = mapOf(
+        "English" to "Hello",
+        "French" to "Bonjour",
+        "Spanish" to "Hola",
+        "Italian" to "Ciao"
+    )
+
 
     private val speechResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == AppCompatActivity.RESULT_OK && result.data != null) {
@@ -63,6 +71,11 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Disable the EditText so user is forced to input voice
+        binding.userInput.isEnabled = false
+
+        // Text to Speech
+        textToSpeech = TextToSpeech(this, this)
 
         // Shake Detection
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -77,17 +90,6 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
 
 
 
-        // Speech Recognition
-        binding.speakButton.setOnClickListener {
-            val selectedLanguageTag = languageTags[selectedLanguage] ?: Locale.getDefault().toLanguageTag()
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguageTag)
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to text")
-            }
-            speechResultLauncher.launch(intent)
-        }
-
         // Spinner setup
         binding.languageSpinner.onItemSelectedListener = this
         val ad: ArrayAdapter<*> = ArrayAdapter(
@@ -97,6 +99,15 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
         )
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.languageSpinner.adapter = ad
+    }
+
+    // Text to Speech Initialization
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            Log.d(TAG, "TextToSpeech is initialized")
+        } else {
+            Log.e(TAG, "Failed to initialize TextToSpeech")
+        }
     }
 
     override fun onResume() {
@@ -116,6 +127,19 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
         selectedLanguage = languages[position] ?: ""
         Log.d(TAG, "Selected language: $selectedLanguage")
         updateAddressForSelectedLanguage(selectedLanguage)
+
+        // Check to see if a language has been selected
+        if (position > 0) {
+            // Launch voice input
+            val selectedLanguageTag = languageTags[selectedLanguage] ?: Locale.getDefault().toLanguageTag()
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, selectedLanguageTag)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to text")
+            }
+            speechResultLauncher.launch(intent)
+        }
+
     }
 
     override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -123,21 +147,16 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
     private val sensorListener: SensorEventListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
 
-
             val x = event.values[0]
             val y = event.values[1]
             val z = event.values[2]
             lastAcceleration = currentAcceleration
-
-
             currentAcceleration = sqrt((x * x + y * y + z * z).toDouble()).toFloat()
             val delta: Float = currentAcceleration - lastAcceleration
             acceleration = acceleration * 0.9f + delta
 
-
             if (acceleration > 8 && binding.userInput.text.toString().isNotBlank()) {
-                Log.d(TAG, "Initializing sensors")
-                Toast.makeText(this@MainActivity, "Shake Event Detected", Toast.LENGTH_SHORT).show()
+                Log.d(TAG, "Shake event detected")
                 val mapIntent = Intent(Intent.ACTION_VIEW, mapUri)
                 mapIntent.setPackage("com.google.android.apps.maps")
 
@@ -145,6 +164,9 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
                 if (mapIntent.resolveActivity(packageManager) != null) {
                     startActivity(mapIntent)
                 }
+
+                // At the same time, say hello in selected language
+                speakHelloInSelectedLanguage()
             }
         }
         override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
@@ -152,11 +174,19 @@ class MainActivity : AppCompatActivity(), OnItemSelectedListener {
     }
     private fun updateAddressForSelectedLanguage(language: String) {
         val sitesList = famousSites[language] ?: return
-
-
         val siteAddress = sitesList.random()
 
         // Update the mapUri with the new address
         mapUri = Uri.parse("geo:0,0?q=${Uri.encode(siteAddress)}")
+    }
+
+    private fun speakHelloInSelectedLanguage() {
+        val languageTag = languageTags[selectedLanguage] ?: return
+        val locale = Locale.forLanguageTag(languageTag)
+        val result = textToSpeech.setLanguage(locale)
+        val selectedHello = hello[selectedLanguage]
+        Log.d(TAG, "$selectedHello")
+        textToSpeech.speak(selectedHello, TextToSpeech.QUEUE_FLUSH, null, null)
+
     }
 }
